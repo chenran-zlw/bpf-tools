@@ -9,6 +9,7 @@ from time import sleep, strftime
 from subprocess import call
 from collections import namedtuple, defaultdict
 from bcc.utils import printb
+import re
 
 def range_check(string):
     value = int(string)
@@ -121,9 +122,51 @@ if debug or args.ebpf:
     if args.ebpf:
         exit()
 
+def find_irq_by_queue(device_prefix, queue_index):
+    queue_index = str(queue_index)
+    target_name = f"{device_prefix}.{queue_index}"
+    irqs = []
+    try:
+        with open('/proc/interrupts', 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line.endswith(target_name):
+                    irq = line.split(':')[0].strip()
+                    irqs.append(int(irq))
+    except (FileNotFoundError, PermissionError) as e:
+        print(f"Error reading /proc/interrupts: {e}")
+    return irqs
+
+DEVICE_PREFIX = "-output"
+
+def cpu_list_to_str(cpu_list):
+    if not cpu_list:
+        return "-1"
+    return ",".join(map(str, cpu_list))
+
+def find_cpu_by_irq(irq_num):
+    irq = str(irq_num)
+    path = f"/proc/irq/{irq}/smp_affinity_list"
+    try:
+        with open(path, 'r') as f:
+            cpu = f.read().strip()
+    except FileNotFoundError:
+        print(f"Error: File not found: {path}")
+    except PermissionError:
+        print(f"Error: Permission denied reading {path}")
+    except Exception as e:
+        print(f"Error reading {path}: {e}")
+    return cpu
+
 def print_udp_event(cpu, data, size):
     event = b["udp_events"].event(data)
-    printb(b"%-5d %-5d %-7d %-12s %-16s %-5d %-16s %-5d" % (event.cpu, event.queue_num, event.pid,
+    irqs = find_irq_by_queue(DEVICE_PREFIX, event.queue_num)
+    irq = irqs[0] if irqs else -1
+    if event.lport == 0 | event.dport == 0:
+        return
+    cpus = find_cpu_by_irq(irq)
+    cpu_list_str = cpu_list_to_str(cpus) if cpus else "-1"
+    printb(b"%-15s %-5d %-5d %-7d %-12s %-16s %-5d %-16s %-5d" % (cpu_list_str.encode(), event.queue_num, irq, event.pid,
         event.name, 
         inet_ntop(AF_INET, pack("I", event.daddr)).encode(),
         event.dport,
@@ -132,7 +175,7 @@ def print_udp_event(cpu, data, size):
 
 b = BPF(text=bpf_text)
 
-print("%-5s %-5s %-7s %-12s %-16s %-5s %-16s %-5s" % ("CPU", "QUEUE", "PID", "COMM", "RADDR", "RPORT", "LADDR", "LPORT"))
+print("%-15s %-5s %-5s %-7s %-12s %-16s %-5s %-16s %-5s" % ("CPU_LIST", "QUEUE", "IRQ", "PID", "COMM", "RADDR", "RPORT", "LADDR", "LPORT"))
 
 b["udp_events"].open_perf_buffer(print_udp_event)
 while 1:

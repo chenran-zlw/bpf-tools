@@ -1,0 +1,17 @@
+#include<uapi/asm-generic/siginfo.h>
+#include<linux/sched.h>
+#include<linux/mm_types.h>
+
+BEGIN{
+    printf("show process cmdline doing exec syscall , use ctrl+c to stop it\n");
+}
+
+tracepoint:syscalls:sys_enter_exec* {
+        time("%D-%H:%M:%S ");
+        $mm = curtask->mm;
+        $start = $mm->arg_start;
+        $end = $mm->arg_end;
+
+        printf("pid: %d %r exec: ", pid, buf(uptr($start), uptr($end-$start)));
+        join(args->argv);
+}

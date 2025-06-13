@@ -1,0 +1,208 @@
+#include<linux/skbuff.h>
+#include<uapi/linux/ip.h>
+#include<uapi/linux/tcp.h>
+#include<net/sock.h>
+#include<linux/net.h>
+
+
+BEGIN {
+        printf("trace if tcp receive/send package slowly. Hit Ctrl-C to end.\n");
+}
+
+tracepoint:net:netif_receive_skb {
+    $skb = (struct sk_buff *)args->skbaddr;
+    $iph = (struct iphdr *)($skb->head + $skb->network_header);
+    $saddr = $iph->saddr;
+    $daddr = $iph->daddr;
+    if ($iph->protocol != 6) {
+        return;
+    }
+
+    $tcph = (struct tcphdr *)($skb->head + $skb->transport_header);
+    $source_port = bswap($tcph->source);
+    $dest_port = bswap($tcph->dest);
+
+    if ($dest_port != 7617)
+    {
+        return;
+    }
+
+    $seq = bswap($tcph->seq);
+    $ack_seq = bswap($tcph->ack_seq);
+
+    printf("netif_receive_skb IP src %s, dst %s, TCP src port %d, dst port %d ",
+                ntop($saddr), ntop($daddr), $source_port, $dest_port);
+    printf("seq: %u, ack_seq: %u ", $seq, $ack_seq);
+    printf("cur is %26s\n",strftime("%F-%T.%f", nsecs));
+}
+
+kprobe:ip_rcv_finish {
+    $sk = (struct sock *)arg1;
+    $skb = (struct sk_buff *)arg2;
+    $iph = (struct iphdr *)($skb->head + $skb->network_header);
+    $saddr = $iph->saddr;
+    $daddr = $iph->daddr;
+    if ($iph->protocol != 6) {
+        return;
+    }
+
+    $tcph = (struct tcphdr *)($skb->head + $skb->transport_header);
+    $source_port = bswap($tcph->source);
+    $dest_port = bswap($tcph->dest);
+
+    if ($dest_port != 7617)
+    {
+        return;
+    }
+
+    $seq = bswap($tcph->seq);
+    $ack_seq = bswap($tcph->ack_seq);
+
+    printf("ip_rcv_finish IP src %s, dst %s, TCP src port %d, dst port %d ",
+                ntop($saddr), ntop($daddr), $source_port, $dest_port);
+    printf("seq: %u, ack_seq: %u ", $seq, $ack_seq);
+    printf("cur is %26s\n",strftime("%F-%T.%f", nsecs));   
+}
+
+kprobe:tcp_v4_do_rcv {
+    $sk = (struct sock *)arg0;
+    $skb = (struct sk_buff *)arg1;
+    $iph = (struct iphdr *)($skb->head + $skb->network_header);
+    $saddr = $iph->saddr;
+    $daddr = $iph->daddr;
+    if ($iph->protocol != 6) {
+        return;
+    }
+
+    $tcph = (struct tcphdr *)($skb->head + $skb->transport_header);
+    $source_port = bswap($tcph->source);
+    $dest_port = bswap($tcph->dest);
+
+    if ($dest_port != 7617)
+    {
+        return;
+    }
+
+    $seq = bswap($tcph->seq);
+    $ack_seq = bswap($tcph->ack_seq);
+
+    printf("tcp_v4_do_rcv IP src %s, dst %s, TCP src port %d, dst port %d ",
+                ntop($saddr), ntop($daddr), $source_port, $dest_port);
+    printf("seq: %u, ack_seq: %u ", $seq, $ack_seq);
+    printf("cur is %26s\n",strftime("%F-%T.%f", nsecs));
+}
+
+kprobe:tcp_queue_rcv {
+    $sk = (struct sock *)arg0;
+    $skb = (struct sk_buff *)arg1;
+    $iph = (struct iphdr *)($skb->head + $skb->network_header);
+    $saddr = $iph->saddr;
+    $daddr = $iph->daddr;
+    if ($iph->protocol != 6) {
+        return;
+    }
+
+    $tcph = (struct tcphdr *)($skb->head + $skb->transport_header);
+    $source_port = bswap($tcph->source);
+    $dest_port = bswap($tcph->dest);
+
+    if ($dest_port != 7617)
+    {
+        return;
+    }
+
+    $seq = bswap($tcph->seq);
+    $ack_seq = bswap($tcph->ack_seq);
+
+    printf("tcp_queue_rcv IP src %s, dst %s, TCP src port %d, dst port %d ",
+                ntop($saddr), ntop($daddr), $source_port, $dest_port);
+    printf("seq: %u, ack_seq: %u ", $seq, $ack_seq);
+    printf("cur is %26s\n",strftime("%F-%T.%f", nsecs));
+}
+
+kprobe:sock_def_readable {
+    $sk = (struct sock *)arg0;
+    $daddr = ntop($sk->__sk_common.skc_daddr);
+    $saddr = ntop($sk->__sk_common.skc_rcv_saddr);
+    $lport = $sk->__sk_common.skc_num;
+    $dport = $sk->__sk_common.skc_dport;
+    $dport = bswap($dport);
+    if ($lport != 7617)
+    {
+        return;
+    }
+
+    printf("sock_def_readable IP src %s, dst %s, TCP src port %d, dst port %d ",
+                $saddr, $daddr, $lport, $dport);
+    printf("cur is %26s\n",strftime("%F-%T.%f", nsecs));
+}
+
+kprobe:tcp_cleanup_rbuf{
+    $sk=(struct sock *)arg0;
+	$daddr = ntop($sk->__sk_common.skc_daddr);
+    $saddr = ntop($sk->__sk_common.skc_rcv_saddr);
+    $lport = $sk->__sk_common.skc_num;
+    $dport = $sk->__sk_common.skc_dport;
+    $dport = bswap($dport);
+    if ($lport != 7617)
+    {
+        return;
+    }
+
+    $copied=arg1;
+    $ts=(struct tcp_sock *)$sk;
+    $copied_seq=$ts->copied_seq;
+	printf("tcp_cleanup_rbuf IP src %s, dst %s, TCP src port %d, dst port %d ", $saddr, $daddr, $lport, $dport);
+    printf("copied: %d, copied_seq: %d  ",$copied,$copied_seq);
+    printf("cur is %26s\n",strftime("%F-%T.%f", nsecs));
+}
+
+kprobe:ip_output{
+        $skb = (struct sk_buff *)arg2;
+        $iph = (struct iphdr *)($skb->head + $skb->network_header);
+        $saddr = $iph->saddr;
+        $daddr = $iph->daddr;
+        if ($iph->protocol != 6) {
+                return;
+        }
+        $tcph = (struct tcphdr *)($skb->head + $skb->transport_header);
+        $source_port = bswap($tcph->source);
+        $dest_port = bswap($tcph->dest);
+        if ($dest_port != 5001)
+        {
+                return;
+        }
+        $seq = bswap($tcph->seq);
+        $ack_seq = bswap($tcph->ack_seq);
+        printf("ip_output IP src %s, dst %s, TCP src port %d, dst port %d ",
+                ntop($saddr), ntop($daddr), $source_port, $dest_port);
+        printf("seq: %u, ack_seq: %u ", $seq, $ack_seq);
+        printf("cur is %26s\n",strftime("%F-%T.%f", nsecs));
+}
+
+kprobe:dev_hard_start_xmit{
+	$skb = (struct sk_buff *)arg0;
+        $iph = (struct iphdr *)($skb->head + $skb->network_header);
+        $saddr = $iph->saddr;
+        $daddr = $iph->daddr;
+        if ($iph->protocol != 6) {
+                return;
+        }
+        $tcph = (struct tcphdr *)($skb->head + $skb->transport_header);
+        $source_port = bswap($tcph->source);
+        $dest_port = bswap($tcph->dest);
+        if ($dest_port != 5001)
+        {
+                return;
+        }
+        $seq = bswap($tcph->seq);
+        $ack_seq = bswap($tcph->ack_seq);
+        printf("dev_hard_start_xmit IP src %s, dst %s, TCP src port %d, dst port %d ",
+                ntop($saddr), ntop($daddr), $source_port, $dest_port);
+        printf("seq: %u, ack_seq: %u ", $seq, $ack_seq);
+        printf("cur is %26s\n",strftime("%F-%T.%f", nsecs));
+}
+
+END {
+
+}
